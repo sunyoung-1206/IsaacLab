@@ -63,25 +63,20 @@ def main():
     )
 
     if sys.platform.startswith("win"):
-        command = ["isaaclab.bat"]
-    else:
-        command = ["./isaaclab.sh"]
+        bash_command = "isaaclab.bat -p"
+    elif sys.platform.startswith("linux"):
+        bash_command = "./isaaclab.sh -p"
 
-    command.extend(
-        [
-            "-p",
-            "scripts/reinforcement_learning/rl_games/train.py",
-            "--task=Isaac-AutoMate-Disassembly-Direct-v0",
-            f"--num_envs={args.num_envs}",
-            f"--seed={args.seed}",
-        ]
-    )
+    bash_command += " scripts/reinforcement_learning/rl_games/train.py --task=Isaac-AutoMate-Disassembly-Direct-v0"
+
+    bash_command += f" --num_envs={str(args.num_envs)}"
+    bash_command += f" --seed={str(args.seed)}"
 
     if args.headless:
-        command.append("--headless")
+        bash_command += " --headless"
 
-    # Run the command
-    subprocess.run(command, check=True)
+    # Run the bash command
+    subprocess.run(bash_command, shell=True, check=True)
 
 
 if __name__ == "__main__":

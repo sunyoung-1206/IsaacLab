@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
-import os
 import re
 import subprocess
 import sys
@@ -61,41 +60,29 @@ def main():
     update_task_param(args.cfg_path, args.assembly_id, args.train, args.log_eval)
 
     # avoid the warning of low GPU occupancy for SoftDTWCUDA function
-    env = os.environ.copy()
-    env["NUMBA_CUDA_LOW_OCCUPANCY_WARNINGS"] = "0"
-
-    # build the command
+    bash_command = "NUMBA_CUDA_LOW_OCCUPANCY_WARNINGS=0"
     if sys.platform.startswith("win"):
-        command = ["isaaclab.bat"]
-    else:
-        command = ["./isaaclab.sh"]
-
-    command.append("-p")
-
+        bash_command += " isaaclab.bat -p"
+    elif sys.platform.startswith("linux"):
+        bash_command += " ./isaaclab.sh -p"
     if args.train:
-        command.extend(
-            [
-                "scripts/reinforcement_learning/rl_games/train.py",
-                "--task=Isaac-AutoMate-Assembly-Direct-v0",
-                f"--seed={args.seed}",
-                f"--max_iterations={args.max_iterations}",
-            ]
-        )
+        bash_command += " scripts/reinforcement_learning/rl_games/train.py --task=Isaac-AutoMate-Assembly-Direct-v0"
+        bash_command += f" --seed={str(args.seed)} --max_iterations={str(args.max_iterations)}"
     else:
         if not args.checkpoint:
             raise ValueError("No checkpoint provided for evaluation.")
-        command.extend(["scripts/reinforcement_learning/rl_games/play.py", "--task=Isaac-AutoMate-Assembly-Direct-v0"])
+        bash_command += " scripts/reinforcement_learning/rl_games/play.py --task=Isaac-AutoMate-Assembly-Direct-v0"
 
-    command.append(f"--num_envs={args.num_envs}")
+    bash_command += f" --num_envs={str(args.num_envs)}"
 
     if args.checkpoint:
-        command.append(f"--checkpoint={args.checkpoint}")
+        bash_command += f" --checkpoint={args.checkpoint}"
 
     if args.headless:
-        command.append("--headless")
+        bash_command += " --headless"
 
-    # Run the command
-    subprocess.run(command, env=env, check=True)
+    # Run the bash command
+    subprocess.run(bash_command, shell=True, check=True)
 
 
 if __name__ == "__main__":

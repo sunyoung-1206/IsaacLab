@@ -154,9 +154,7 @@ def lidar_pattern(cfg: patterns_cfg.LidarPatternCfg, device: str) -> tuple[torch
         up_to = None
 
     # Horizontal angles
-    num_horizontal_angles = (
-        math.ceil((cfg.horizontal_fov_range[1] - cfg.horizontal_fov_range[0]) / cfg.horizontal_res) + 1
-    )
+    num_horizontal_angles = math.ceil((cfg.horizontal_fov_range[1] - cfg.horizontal_fov_range[0]) / cfg.horizontal_res)
     horizontal_angles = torch.linspace(cfg.horizontal_fov_range[0], cfg.horizontal_fov_range[1], num_horizontal_angles)[
         :up_to
     ]

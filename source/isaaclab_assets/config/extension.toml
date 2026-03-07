@@ -12,7 +12,6 @@ keywords = ["kit", "robotics", "assets", "isaaclab"]
 
 [dependencies]
 "isaaclab" = {}
-"isaaclab_contrib" = {}
 
 [core]
 reloadable = false

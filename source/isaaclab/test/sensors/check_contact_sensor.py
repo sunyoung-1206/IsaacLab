@@ -36,12 +36,13 @@ simulation_app = app_launcher.app
 
 import torch
 
+from isaacsim.core.api.simulation_context import SimulationContext
 from isaacsim.core.cloner import GridCloner
+from isaacsim.core.utils.viewports import set_camera_view
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.sensors.contact_sensor import ContactSensor, ContactSensorCfg
-from isaaclab.sim import SimulationCfg, SimulationContext
 from isaaclab.utils.timer import Timer
 
 ##
@@ -74,9 +75,9 @@ def main():
     """Spawns the ANYmal robot and clones it using Isaac Sim Cloner API."""
 
     # Load kit helper
-    sim = SimulationContext(SimulationCfg(dt=0.005))
+    sim = SimulationContext(physics_dt=0.005, rendering_dt=0.005, backend="torch", device="cuda:0")
     # Set main camera
-    sim.set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
+    set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
 
     # Enable hydra scene-graph instancing
     # this is needed to visualize the scene when flatcache is enabled

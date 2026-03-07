@@ -177,29 +177,165 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # reset environment
     obs = env.get_observations()
     timestep = 0
+    # ===== 데이터 로깅 추가 시작 =====
+    import numpy as np
+
+    log_data = {
+        # 명령값
+        "cmd_vel": [],
+        "actions": [],  # Policy 출력 (desired joint pos)
+        
+        # 관절 상태
+        "joint_pos": [],
+        "joint_vel": [],
+        "joint_torque": [],
+        "joint_power": [],
+        
+        # 베이스 상태
+        "base_pos": [],
+        "base_quat": [],
+        "base_lin_vel": [],
+        "base_ang_vel": [],
+        
+        # 시간
+        "timestamp": [],
+    }
+
+    print("[INFO] Starting data logging...")
+    # ===== 데이터 로깅 추가 끝 =====
+    # 시뮬레이션 루프 전에 추가
+    prev_command = None
+    command_episode = 0
+    # num envs 개수 만큼 반복 실험
+    prev_commands = [None] * env.unwrapped.num_envs
+    command_episodes = [0] * env.unwrapped.num_envs
+    current_episode_dir = None  # 현재 에피소드 폴더
+
+    log_data_all_envs = []
+    for env_idx in range(env.unwrapped.num_envs):
+        log_data_all_envs.append({
+            "cmd_vel": [],
+            "actions": [],
+            "joint_pos": [],
+            "joint_vel": [],
+            "joint_torque": [],
+            "joint_power": [],
+            "base_pos": [],
+            "base_quat": [],
+            "base_lin_vel": [],
+            "base_ang_vel": [],
+            "timestamp": [],
+        })
+
+    print(f"[INFO] Starting data logging for {env.unwrapped.num_envs} environments...")
+    print(f"[INFO] All environments will follow env[0]'s command")
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
         # run everything in inference mode
         with torch.inference_mode():
+            # ===== env[0]의 명령을 모든 환경에 복사 =====
+            if hasattr(env.unwrapped, 'command_manager'):
+                all_commands = env.unwrapped.command_manager.get_command("base_velocity")
+                # env[0]의 명령을 가져와서 모든 환경에 브로드캐스트
+                reference_command = all_commands[0:1]  # shape: [1, 3]
+                all_commands[:] = reference_command.repeat(env.unwrapped.num_envs, 1)
             # agent stepping
             actions = policy(obs)
             # env stepping
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
             policy_nn.reset(dones)
-        if args_cli.video:
-            timestep += 1
-            # Exit the play loop after recording one video
-            if timestep == args_cli.video_length:
-                break
-
-        # time delay for real-time evaluation
+            # ===== 데이터 수집 시작 =====
+            robot = env.unwrapped.scene["robot"]
+            # 명령 속도 (이제 모두 같을 것)
+            current_commands = all_commands.cpu().numpy()
+            
+            # 각 환경별로 처리
+            for env_idx in range(env.unwrapped.num_envs):
+                log_data = log_data_all_envs[env_idx]
+                
+                # Actions
+                log_data["actions"].append(actions[env_idx].cpu().numpy())
+                
+                # 관절 데이터
+                log_data["joint_pos"].append(robot.data.joint_pos[env_idx].cpu().numpy())
+                log_data["joint_vel"].append(robot.data.joint_vel[env_idx].cpu().numpy())
+                
+                torque = robot.data.applied_torque[env_idx]
+                vel = robot.data.joint_vel[env_idx]
+                log_data["joint_torque"].append(torque.cpu().numpy())
+                log_data["joint_power"].append((torque * vel).cpu().numpy())
+                
+                # 베이스 데이터
+                log_data["base_pos"].append(robot.data.root_pos_w[env_idx].cpu().numpy())
+                log_data["base_quat"].append(robot.data.root_quat_w[env_idx].cpu().numpy())
+                log_data["base_lin_vel"].append(robot.data.root_lin_vel_b[env_idx].cpu().numpy())
+                log_data["base_ang_vel"].append(robot.data.root_ang_vel_b[env_idx].cpu().numpy())
+                
+                # 명령 속도
+                current_command = current_commands[env_idx]
+                log_data["cmd_vel"].append(current_command)
+                
+                # 타임스탬프
+                log_data["timestamp"].append(timestep * dt)
+                
+                # ===== 명령 변경 감지 및 저장 =====
+                if prev_commands[env_idx] is not None:
+                    command_changed = np.linalg.norm(current_command - prev_commands[env_idx]) > 0.1
+                    
+                    if command_changed and len(log_data["timestamp"]) > 10:
+                        # env[0]일 때 새 에피소드 폴더 생성
+                        if env_idx == 0:
+                            episode_num = command_episodes[0]
+                            cmd = prev_commands[0]
+                            # 폴더 이름: episode_000_vx1.00_vy0.00_yaw0.00
+                            episode_folder_name = (f"episode_{episode_num:03d}_"
+                                                f"vx{cmd[0]:.2f}_vy{cmd[1]:.2f}_yaw{cmd[2]:.2f}")
+                            current_episode_dir = os.path.join(log_dir, episode_folder_name)
+                            os.makedirs(current_episode_dir, exist_ok=True)
+                            
+                            print(f"\n[INFO] Command changed from {cmd} to {current_command}")
+                            print(f"      Created folder: {episode_folder_name}")
+                            print(f"      Saving data for all {env.unwrapped.num_envs} environments...")
+                        
+                        # 각 환경의 데이터를 해당 에피소드 폴더에 저장
+                        save_path = os.path.join(current_episode_dir, f"env{env_idx:02d}.npz")
+                        save_dict = {}
+                        for key, value in log_data.items():
+                            if len(value) > 0:
+                                save_dict[key] = np.array(value)
+                        
+                        np.savez(save_path, **save_dict)
+                        print(f"      Saved: {os.path.basename(current_episode_dir)}/env{env_idx:02d}.npz "
+                            f"({len(log_data['timestamp'])} steps)")
+                        
+                        # 다음 에피소드를 위해 초기화
+                        command_episodes[env_idx] += 1
+                        log_data_all_envs[env_idx] = {
+                            "cmd_vel": [],
+                            "actions": [],
+                            "joint_pos": [],
+                            "joint_vel": [],
+                            "joint_torque": [],
+                            "joint_power": [],
+                            "base_pos": [],
+                            "base_quat": [],
+                            "base_lin_vel": [],
+                            "base_ang_vel": [],
+                            "timestamp": [],
+                        }
+                
+                prev_commands[env_idx] = current_command.copy()
+        
+        timestep += 1
+        if args_cli.video and timestep >= args_cli.video_length:
+            break
+        
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
-    # close the simulator
     env.close()
 
 

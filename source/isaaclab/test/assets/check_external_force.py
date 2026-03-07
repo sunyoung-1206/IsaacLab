@@ -106,7 +106,8 @@ def main():
             robot.write_joint_state_to_sim(joint_pos, joint_vel)
             robot.reset()
             # apply force
-            robot.permanent_wrench_composer.set_forces_and_torques(
+            # TODO: Replace with wrench composer once the deprecation is complete
+            robot.set_external_force_and_torque(
                 external_wrench_b[..., :3], external_wrench_b[..., 3:], body_ids=body_ids
             )
             # reset command

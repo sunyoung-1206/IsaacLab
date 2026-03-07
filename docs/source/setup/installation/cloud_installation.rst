@@ -133,28 +133,28 @@ Next, run the deployment script for your preferred cloud:
 
       .. code-block:: bash
 
-         ./deploy-aws --isaaclab v2.3.2
+         ./deploy-aws --isaaclab v2.3.0
 
    .. tab-item:: Azure
       :sync: azure
 
       .. code-block:: bash
 
-         ./deploy-azure --isaaclab v2.3.2
+         ./deploy-azure --isaaclab v2.3.0
 
    .. tab-item:: GCP
       :sync: gcp
 
       .. code-block:: bash
 
-         ./deploy-gcp --isaaclab v2.3.2
+         ./deploy-gcp --isaaclab v2.3.0
 
    .. tab-item:: Alibaba Cloud
       :sync: alicloud
 
       .. code-block:: bash
 
-         ./deploy-alicloud --isaaclab v2.3.2
+         ./deploy-alicloud --isaaclab v2.3.0
 
 Follow the prompts for entering information regarding the environment setup and credentials.
 Once successful, instructions for connecting to the cloud instance will be available
