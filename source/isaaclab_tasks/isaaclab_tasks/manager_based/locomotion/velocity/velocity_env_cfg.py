@@ -93,7 +93,7 @@ class CommandsCfg:
 
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(10.0, 10.0),
+        resampling_time_range=(10.0, 10.0), # 기존에는 10초마다 변경
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
         heading_command=True,
@@ -306,7 +306,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 20.0
+        self.episode_length_s = 60.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation

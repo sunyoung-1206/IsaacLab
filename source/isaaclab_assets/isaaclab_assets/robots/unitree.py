@@ -24,7 +24,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ActuatorNetMLPCfg, DCMotorCfg, ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
-
+from isaaclab_assets.actuators.electric_motor import ElectricMotor, ElectricMotorCfg
 ##
 # Configuration - Actuators.
 ##
@@ -167,14 +167,22 @@ UNITREE_GO2_CFG = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
-        "base_legs": DCMotorCfg(
+        "base_legs": ElectricMotorCfg(
             joint_names_expr=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             effort_limit=23.5,
             saturation_effort=23.5,
             velocity_limit=30.0,
             stiffness=25.0,
-            damping=0.5,
+            damping=0.6, # originally 0.5
             friction=0.0,
+            # 전기 파라미터 추가
+            Kt=0.128,
+            Ke=0.128,
+            R=0.3,
+            alpha=0.00393,
+            T_ambient=25.0,
+            R_thermal=2.0,
+            C_thermal=50.0,
         ),
     },
 )
