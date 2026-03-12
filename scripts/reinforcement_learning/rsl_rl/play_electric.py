@@ -262,6 +262,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             actions = policy(obs)
             obs, _, dones, _ = env.step(actions)
             policy_nn.reset(dones)
+            # robot = env.unwrapped.scene["robot"]
+            # print(robot.data.body_incoming_joint_wrench_b.shape)
+            # print(robot.data.body_incoming_joint_wrench_b[0])
+            # print(robot.data.body_names)
+            # print(robot.data.joint_names)
+            # body_idx = [1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14]
+            # wrench = robot.data.body_incoming_joint_wrench_b
+            # print("x축:", wrench[0, body_idx, 3])
+            # print("y축:", wrench[0, body_idx, 4])
+            # print("z축:", wrench[0, body_idx, 5])
+            # print("applied:", robot.data.applied_torque[0])
 
             done_indices = dones.nonzero(as_tuple=False).squeeze(-1)
             for idx in done_indices:

@@ -1887,6 +1887,8 @@ class Articulation(AssetBase):
                 control_action,
                 joint_pos=self._data.joint_pos[:, actuator.joint_indices],
                 joint_vel=self._data.joint_vel[:, actuator.joint_indices],
+                # computed_torque=self._data.computed_torque[:, actuator.joint_indices],
+                # applied_torque=self._data.applied_torque[:, actuator.joint_indices],
             )
             # update targets (these are set into the simulation)
             if control_action.joint_positions is not None:

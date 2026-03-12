@@ -76,7 +76,7 @@ from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_che
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
-
+# import sys
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 
@@ -95,6 +95,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    # print(f"[INFO] robot prim_path: {env_cfg.scene.robot.prim_path}")
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -117,6 +118,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    robot = env.unwrapped.scene["robot"]
+    for actuator in robot.actuators.values():
+        if hasattr(actuator, 'inject_physx_view'):
+            actuator.inject_physx_view(robot.root_physx_view)
+            print(f"[INFO] Injected physx_view into {actuator.__class__.__name__}")
+    # robot = env.unwrapped.scene["robot"]
+    # view = robot.root_physx_view
+    # forces = view.get_dof_projected_joint_forces()
+    # print(f"shape: {forces.shape}", flush=True)
+    # print(f"dtype: {forces.dtype}", flush=True)
+    # print(f"sample: {forces[0]}", flush=True)
+    # sys.stdout.flush()
+    # print([m for m in dir(robot.root_physx_view) if 'effort' in m.lower() or 'force' in m.lower() or 'torque' in m.lower()])
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):

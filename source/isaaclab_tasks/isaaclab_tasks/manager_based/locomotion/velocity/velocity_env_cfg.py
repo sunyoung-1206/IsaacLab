@@ -305,10 +305,12 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4
-        self.episode_length_s = 60.0
+        self.decimation = 4 # policy update 주기: 5ms*decimation
+        self.episode_length_s = 20.0 #original: 20.0
         # simulation settings
-        self.sim.dt = 0.005
+        self.sim.dt = 0.005 # original: 0.005
+        # self.sim.physx.solver_position_iteration_count = 8
+        # self.sim.physx.solver_velocity_iteration_count = 2
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15

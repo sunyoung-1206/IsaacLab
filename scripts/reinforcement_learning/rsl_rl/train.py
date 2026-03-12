@@ -168,6 +168,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    robot = env.unwrapped.scene["robot"]
+    for actuator in robot.actuators.values():
+        if hasattr(actuator, 'inject_physx_view'):
+            actuator.inject_physx_view(robot.root_physx_view)
+            print(f"[INFO] Injected physx_view into {actuator.__class__.__name__}")
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
