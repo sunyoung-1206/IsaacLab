@@ -278,10 +278,115 @@ python scripts/mujoco/compare_sims.py \
 - **마찰 범위 확장**: `(0.8, 0.8) → (0.4, 1.5)` (MuJoCo 범위 포함)
 - **모터 강도 DR 추가**: 스타트업 시 stiffness / damping ±20% 랜덤화
 
-### `ElectricMotorCfg` 파라미터
-- 인덕턴스 `L`: `7.5e-4 → 1e-4` H
-- 관성 모멘트 `J`: `0.05 → 1e-4` kg·m²
-
 ### `UNITREE_GO2_CFG` (unitree.py)
-- 현재 학습 설정: `ElectricMotorCfg → DCMotorCfg` (학습은 DCMotor 기준)
-  ElectricMotor로 전환하려면 `unitree.py`에서 `DCMotorCfg`를 `ElectricMotorCfg`로 변경
+- 현재 학습 설정: `DCMotorCfg` 사용 (ElectricMotor 시도 후 복귀)
+
+---
+
+## ElectricMotor Isaac Lab 구현 시행착오
+
+`source/isaaclab_assets/isaaclab_assets/actuators/electric_motor.py`에 구현이 남아 있다.
+제대로 동작하지 않아 현재 학습에는 사용하지 않지만, 시행착오 기록으로 보존한다.
+
+### 구현 목표
+
+PhysX(Isaac Sim)의 PD 제어 대신 전기-기계 연립 ODE를 직접 적분해 더 물리적으로 정확한 액추에이터를 구현하는 것.
+
+```
+dI/dt     = (V_cmd - R·I - Ke·ω) / L       # 전기 방정식
+dω/dt     = (Kt·I·gr - B·ω - τ_load) / J   # 기계 방정식
+τ_joint   = Kt · I · gr
+```
+
+### 핵심 문제: ω 이중 적분
+
+가장 근본적인 문제는 **ω(관절 속도)를 ODE와 PhysX가 동시에 결정**한다는 점이다.
+
+- ODE는 `dω/dt`를 적분해 ω를 계산
+- PhysX도 같은 ω를 rigid body dynamics로 독립적으로 계산
+- 매 스텝 ODE 결과 ω를 버리고 PhysX 값으로 덮어써야 함 → `dω/dt` 적분이 무의미해짐
+
+```python
+# 코드에서의 처리 — ODE로 구한 omega를 결국 PhysX 값으로 덮어씀
+self.omega = omega_physx.clone()  # ODE 결과 무시
+self.I     = I_ode.clone()        # 전류만 ODE 결과 사용
+```
+
+결론적으로 ω까지 ODE에서 풀 이유가 없고, 전기 방정식(`dI/dt`)만 적분하면 충분하다.
+MuJoCo 버전(`play_mujoco.py`)이 이 방식으로 구현되어 있었으나, 커플링 없는 적분은 물리적 의미가 제한적이어서 MuJoCo 쪽도 최종적으로 제거했다.
+
+### τ_load 지연 문제
+
+ODE의 기계 방정식에는 `τ_load`(부하 토크)가 필요한데, PhysX에서 읽어오는 값이 **항상 이전 스텝 값**이다.
+
+```python
+# get_dof_projected_joint_forces()는 이전 physics step의 값
+self.tau_load = self._get_tau_load()  # 1 step 지연
+```
+
+200Hz 시뮬레이션에서 5ms 지연이지만, 전기 시상수(`τ_e = L/R ≈ 0.33ms`)보다 훨씬 커서
+`τ_load` 피드백이 부정확하다.
+
+### PhysX view 외부 주입 문제
+
+`get_dof_projected_joint_forces()`를 호출하려면 `root_physx_view`가 필요한데,
+Isaac Lab의 액추에이터 초기화 시점에는 이 view가 아직 준비되어 있지 않다.
+따라서 play 스크립트에서 환경 초기화 후 수동으로 주입해야 했다.
+
+```python
+# play.py에서 매번 수동 호출 필요
+for actuator in robot.actuators.values():
+    if hasattr(actuator, 'inject_physx_view'):
+        actuator.inject_physx_view(robot.root_physx_view)
+```
+
+이는 Isaac Lab의 표준 인터페이스를 벗어나며, 학습 루프와 통합이 복잡해진다.
+
+### 파라미터 튜닝 시행착오
+
+| 파라미터 | 초기값 | 최종값 | 이유 |
+|----------|--------|--------|------|
+| `L` (인덕턴스) | `7.5e-4` H | `1e-4` H | `τ_e = L/R`이 너무 커서 ODE 적분 스텝 수 과다, 불안정 |
+| `J` (관성 모멘트) | `0.05` kg·m² | `1e-4` kg·m² | J가 크면 ODE의 ω 동역학이 PhysX보다 너무 느려 매 스텝 덮어쓰기 오차 누적 |
+
+### V_cmd 계산 방식 변경
+
+처음에는 전압 공간에서 직접 PD를 구성했으나 (주석으로 남아 있음):
+
+```python
+# 1차 시도 (폐기): 전압 공간 PD
+# Kp_v = stiffness * R / (Kt * gr)
+# V_cmd = Kp_v * e_q + Kd_v * e_qdot + Ke * omega
+```
+
+게인 스케일링이 직관적이지 않아, 최종적으로는 **역산 방식**으로 변경했다:
+
+```python
+# 최종: 토크 역산 → 전류 → 전압
+tau_des = Kp * e_q + Kd * e_qdot          # 토크 공간 PD (기존과 동일)
+I_des   = tau_des / (Kt * gr)              # 목표 전류 역산
+V_cmd   = I_des * R + Ke * omega          # steady-state 전압 역산
+```
+
+이 방식은 기존 DCMotor의 토크 게인(Kp=25, Kd=0.6)을 그대로 재사용할 수 있어
+기존 학습된 정책과 호환성이 높다.
+
+### 결론 및 향후 방향
+
+Isaac Lab(PhysX) 환경에서 전기모터 ODE를 제대로 적분하려면:
+
+1. **ω를 ODE에서 빼고 전기 방정식만 적분** — PhysX가 ω를 담당하므로 `dI/dt`만 풀면 됨
+2. **τ_load 불필요** — `dω/dt` 항 자체를 제거하면 τ_load 지연 문제도 사라짐
+3. **PhysX view 주입 제거 가능** — projected joint forces를 읽을 필요가 없어짐
+
+즉, 올바른 구조는 다음과 같다:
+
+```python
+dI/dt   = (V_cmd - R·I - Ke·ω_physx) / L   # ω는 PhysX에서 읽어옴
+τ_joint = Kt · I · gr
+```
+
+이는 MuJoCo 버전(`play_mujoco.py`)이 처음에 구현했던 방식이다.
+그러나 이렇게 하면 `dω/dt` 없이 `dI/dt`만 적분하는 단순 1차 ODE가 되며,
+이는 물리적으로 **커플링된 시스템을 정확히 모델링하지 못한다**.
+결국 전기-기계 연립 ODE의 의미가 사라지므로, 현재는 단순 DCMotor(PD 제어)를 사용한다.
