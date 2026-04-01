@@ -252,26 +252,6 @@ class ElectricMotor(DCMotor):
         control_action.joint_efforts    = tau_joint
         control_action.joint_positions  = None
         control_action.joint_velocities = None
-        if sim_time < 0.1:
-            print(f"tau_load mean: {self.tau_load.abs().mean():.3f}, max: {self.tau_load.abs().max():.3f}")
-            print(f"I_ode mean: {I_ode.abs().mean():.3f}, max: {I_ode.abs().max():.3f}")
-            print(f"tau_joint mean: {tau_joint.abs().mean():.3f}")
-            max_idx = I_ode.abs().argmax()
-            env_idx = max_idx // self.num_joints
-            joint_idx = max_idx % self.num_joints
-            print(f"I_ode max env={env_idx}, joint={joint_idx}, val={I_ode.abs().max():.1f}")
-            print(f"V_cmd at max: {V_cmd[env_idx, joint_idx]:.3f}")
-            print(f"omega at max: {self.omega[env_idx, joint_idx]:.3f}")
-            print(f"tau_load at max: {self.tau_load[env_idx, joint_idx]:.3f}")
-            print(f"self.I min: {self.I.min():.3f}, max: {self.I.max():.3f}")
-            print(f"V_cmd mean: {V_cmd.abs().mean():.3f}, tau_des mean: {tau_des.abs().mean():.3f}, e_q mean: {e_q.abs().mean():.3f}")
-            net_V = V_cmd - self.cfg.Ke * self.omega
-            print(f"net_V mean: {net_V.abs().mean():.3f}, omega mean: {self.omega.abs().mean():.3f}")
-            print(f"tau_load in ODE mean: {self.tau_load.abs().mean():.3f}, Kt*I*gr mean: {(self.cfg.Kt * self.I * gr).abs().mean():.3f}")
-            I_ss_check = (V_cmd - self.cfg.Ke * self.omega) / self._R
-            print(f"I_ss_check mean: {I_ss_check.abs().mean():.3f}, I_ode mean: {I_ode.abs().mean():.3f}")
-            print(f"velocity_limit: {self.velocity_limit}, vel_lim in ODE: {self.velocity_limit * self.cfg.gear_ratio}")
-            print(f"state1 omega mean: {state1[...,1].abs().mean():.3f}")
 
         return control_action
 

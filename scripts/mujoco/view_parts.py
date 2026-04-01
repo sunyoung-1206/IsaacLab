@@ -1,15 +1,18 @@
 """
 Go2 부품 개별 뷰어
-사용법: python view_parts.py
+사용법: python view_parts.py [--assets_dir <path>]
   번호 입력 → 해당 부품 뷰어 열기 → 창 닫으면 다음 선택
 """
 
+import argparse
 import os
 import mujoco
 import mujoco.viewer
 
-ASSETS_DIR = os.path.expanduser("~/mujoco_menagerie/unitree_go2/assets")
-parts = sorted([f for f in os.listdir(ASSETS_DIR) if f.endswith(".obj")])
+DEFAULT_ASSETS_DIR = "~/mujoco_menagerie/unitree_go2/assets"
+
+ASSETS_DIR = os.path.expanduser(DEFAULT_ASSETS_DIR)
+parts: list = []
 
 
 def show_part(obj_file):
@@ -41,6 +44,15 @@ def print_parts():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--assets_dir", default=DEFAULT_ASSETS_DIR,
+                        help=f"Go2 OBJ assets 디렉토리 (기본: {DEFAULT_ASSETS_DIR})")
+    args = parser.parse_args()
+
+    global ASSETS_DIR, parts
+    ASSETS_DIR = os.path.expanduser(args.assets_dir)
+    parts = sorted([f for f in os.listdir(ASSETS_DIR) if f.endswith(".obj")])
+
     print_parts()
     while True:
         cmd = input("번호 입력 (l=목록, q=종료): ").strip()

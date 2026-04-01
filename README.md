@@ -49,6 +49,50 @@ detailed tutorials and step-by-step guides. Follow these links to learn more abo
 - [Available environments](https://isaac-sim.github.io/IsaacLab/main/source/overview/environments.html)
 
 
+## MuJoCo Sim-to-Sim Pipeline (Custom)
+
+This fork adds a **MuJoCo Sim-to-Sim pipeline** for the Unitree Go2 quadruped.
+Policies trained in Isaac Lab can be reproduced in MuJoCo and compared side-by-side.
+
+### Key additions
+
+| Component | Description |
+|-----------|-------------|
+| `scripts/mujoco/play_mujoco.py` | Run an Isaac Lab `.pt` policy in MuJoCo (PD or ElectricMotor actuator mode, fault injection, data logging) |
+| `scripts/mujoco/compare_sims.py` | Generate comparison plots between Isaac Lab and MuJoCo trajectory data |
+| `scripts/mujoco/test_actuators.py` | Standalone actuator unit tests in MuJoCo |
+| `scripts/mujoco/view_assembly.py` | Interactive Go2 body visibility toggler |
+| `scripts/mujoco/view_parts.py` | Individual Go2 OBJ mesh part viewer |
+| `ElectricMotorCfg` actuator | Physics-accurate electric motor ODE (`dI/dt = (V−RI−Keω)/L`) for Isaac Lab training |
+
+### Quick start
+
+```bash
+# 1. Clone this repo and mujoco_menagerie (Go2 model)
+git clone https://github.com/sunyoung-1206/IsaacLab
+git clone https://github.com/sunyoung-1206/mujoco_menagerie ~/mujoco_menagerie
+
+# 2. Run policy in MuJoCo and save data
+python scripts/mujoco/play_mujoco.py \
+    --policy logs/rsl_rl/Go2_Rough/exported/policy.pt \
+    --scene ~/mujoco_menagerie/unitree_go2/go2_scene.xml \
+    --cmd_vx 1.0 --log_data logs/mujoco_data.npz
+
+# 3. Run same policy in Isaac Lab and save data
+python scripts/reinforcement_learning/rsl_rl/play.py \
+    --task Isaac-Velocity-Rough-Unitree-Go2-v0 --num_envs 1 \
+    --cmd_vx 1.0 --sim2sim_init_z 0.355 --log_data logs/isaac_data.npz
+
+# 4. Compare
+python scripts/mujoco/compare_sims.py \
+    --isaac logs/isaac_data.npz --mujoco logs/mujoco_data.npz \
+    --plots basic psd contact --out logs/comparison
+```
+
+Full documentation: [`scripts/mujoco/README.md`](scripts/mujoco/README.md)
+
+---
+
 ## Isaac Sim Version Dependency
 
 Isaac Lab is built on top of Isaac Sim and requires specific versions of Isaac Sim that are compatible with each

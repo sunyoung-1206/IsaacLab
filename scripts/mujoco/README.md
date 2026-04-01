@@ -23,10 +23,13 @@ MuJoCo 재현 (play_mujoco.py)    ←──→    IsaacLab 재생 (play.py --log
 pip install mujoco torch numpy matplotlib scipy
 ```
 
-MuJoCo 모델 파일 (Unitree Go2 Menagerie):
+MuJoCo 모델 파일 (Unitree Go2 Menagerie) — 이 프로젝트와 함께 fork된 저장소 사용:
 ```bash
-git clone https://github.com/google-deepmind/mujoco_menagerie ~/mujoco_menagerie
+git clone https://github.com/sunyoung-1206/mujoco_menagerie ~/mujoco_menagerie
 ```
+
+스크립트들은 `~/mujoco_menagerie`를 기본 경로로 사용합니다.
+다른 위치에 clone 했다면 `--scene` / `--assets_dir` 인자로 경로를 지정하세요.
 
 ---
 
@@ -236,11 +239,15 @@ python scripts/mujoco/test_actuators.py \
 
 Go2 로봇의 body(링크)를 선택적으로 켜고 끄면서 조립 상태를 확인합니다.
 
-> **주의**: `SCENE` 경로가 스크립트 내에 하드코딩되어 있습니다.
-> 실행 전 `view_assembly.py` 상단의 `SCENE` 변수를 본인 환경에 맞게 수정하세요.
+기본 경로: `~/mujoco_menagerie/unitree_go2/go2_white_bg.xml`
 
 ```bash
+# 기본 경로 사용 (mujoco_menagerie를 홈 디렉토리에 clone한 경우)
 python scripts/mujoco/view_assembly.py
+
+# 경로 직접 지정
+python scripts/mujoco/view_assembly.py \
+    --scene ~/mujoco_menagerie/unitree_go2/go2_white_bg.xml
 ```
 
 **터미널 명령어:**
@@ -260,11 +267,15 @@ python scripts/mujoco/view_assembly.py
 
 Go2의 개별 OBJ 메시 파일을 하나씩 확인합니다.
 
-> **주의**: `ASSETS_DIR` 경로가 스크립트 내에 하드코딩되어 있습니다.
-> `~/mujoco_menagerie/unitree_go2/assets` 디렉토리를 가리키도록 설정하세요.
+기본 경로: `~/mujoco_menagerie/unitree_go2/assets`
 
 ```bash
+# 기본 경로 사용
 python scripts/mujoco/view_parts.py
+
+# 경로 직접 지정
+python scripts/mujoco/view_parts.py \
+    --assets_dir ~/mujoco_menagerie/unitree_go2/assets
 ```
 
 번호를 입력하면 해당 부품의 3D 뷰어가 열립니다. 창을 닫으면 다음 부품을 선택할 수 있습니다.

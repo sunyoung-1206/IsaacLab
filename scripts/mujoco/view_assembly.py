@@ -1,6 +1,6 @@
 """
 Go2 조립 뷰어 - 부품별 켜기/끄기
-사용법: python view_assembly.py
+사용법: python view_assembly.py [--scene <xml_path>]
 
 터미널 명령:
   l              전체 부품 목록 (현재 상태 포함)
@@ -11,13 +11,14 @@ Go2 조립 뷰어 - 부품별 켜기/끄기
   q              종료
 """
 
+import argparse
 import threading
 import time
 import mujoco
 import mujoco.viewer
 import numpy as np
 
-SCENE = "/home/rbdo/mujoco_menagerie/unitree_go2/go2_white_bg.xml"
+DEFAULT_SCENE = "~/mujoco_menagerie/unitree_go2/go2_white_bg.xml"
 
 
 def build_body_geom_map(model):
@@ -40,7 +41,14 @@ def set_body_alpha(model, bmap, bname, alpha, original_rgba):
 
 
 def main():
-    model = mujoco.MjModel.from_xml_path(SCENE)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scene", default=DEFAULT_SCENE,
+                        help=f"MuJoCo XML 씬 파일 경로 (기본: {DEFAULT_SCENE})")
+    args = parser.parse_args()
+
+    import os
+    scene_path = os.path.expanduser(args.scene)
+    model = mujoco.MjModel.from_xml_path(scene_path)
     data  = mujoco.MjData(model)
 
     # 원본 rgba 저장
