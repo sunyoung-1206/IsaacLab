@@ -49,26 +49,16 @@ git clone https://github.com/sunyoung-1206/mujoco_menagerie ~/mujoco_menagerie
 
 Isaac Lab에서 학습된 `.pt` JIT 정책 파일을 MuJoCo 환경에서 실행합니다.
 
-### 액추에이터 모드
-
-| 모드 | 설명 |
-|------|------|
-| `pd` (기본) | 순수 PD 토크 제어 (Isaac Lab `DCMotor` 재현) |
-| `electric` | 전기모터 ODE 적분 (`dI/dt = (V_cmd - R·I - Ke·ω) / L`) |
+Isaac Lab `DCMotorCfg`와 동일한 PD 토크 제어를 재현합니다:
+- `τ = Kp·(q_target − q) + Kd·(−qdot)`
+- velocity saturation 및 effort_limit 클리핑 포함
 
 ### 기본 실행
 
 ```bash
-# PD 모드 (기본)
 python scripts/mujoco/play_mujoco.py \
     --policy logs/rsl_rl/Go2_Rough/exported/policy.pt \
     --scene ~/mujoco_menagerie/unitree_go2/go2_scene.xml
-
-# 전기모터 모드
-python scripts/mujoco/play_mujoco.py \
-    --policy logs/rsl_rl/Go2_Rough/exported/policy.pt \
-    --scene ~/mujoco_menagerie/unitree_go2/go2_scene.xml \
-    --actuator electric
 ```
 
 ### 속도 명령 설정
@@ -77,25 +67,6 @@ python scripts/mujoco/play_mujoco.py \
 python scripts/mujoco/play_mujoco.py \
     --policy policy.pt --scene go2_scene.xml \
     --cmd_vx 1.0 --cmd_vy 0.0 --cmd_yaw 0.0
-```
-
-### 고장 시뮬레이션 (electric 모드 전용)
-
-특정 관절의 저항값을 점진적으로 증가시켜 전기모터 고장을 시뮬레이션합니다.
-
-```bash
-# RL_calf 관절(인덱스 10)에 t=5s부터 5초에 걸쳐 저항 0.3Ω → 3.0Ω으로 증가
-python scripts/mujoco/play_mujoco.py \
-    --policy policy.pt --scene go2_scene.xml \
-    --actuator electric \
-    --fault_joint 10 --fault_R 3.0 --fault_start 5.0 --fault_dur 5.0
-```
-
-**관절 인덱스 (policy 순서):**
-```
- 0: FL_hip    1: FR_hip    2: RL_hip    3: RR_hip
- 4: FL_thigh  5: FR_thigh  6: RL_thigh  7: RR_thigh
- 8: FL_calf   9: FR_calf  10: RL_calf  11: RR_calf
 ```
 
 ### 데이터 로깅
@@ -115,19 +86,14 @@ python scripts/mujoco/play_mujoco.py \
 ### 전체 옵션
 
 ```
---policy        정책 파일 경로 (.pt JIT) [필수]
---scene         MuJoCo XML 씬 파일 경로 [필수]
---actuator      액추에이터 모드: pd | electric (기본: pd)
---cmd_vx        전진 속도 명령 [m/s] (기본: 1.0)
---cmd_vy        측면 속도 명령 [m/s] (기본: 0.0)
---cmd_yaw       요 각속도 명령 [rad/s] (기본: 0.0)
---duration      시뮬레이션 시간 [s] (기본: 30.0)
---log_data      데이터 저장 경로 .npz
---fault_joint   고장 관절 인덱스 (electric 전용)
---fault_R       고장 시 저항 [Ω] (기본: 3.0)
---fault_start   고장 시작 시각 [s] (기본: 5.0)
---fault_dur     고장 전이 시간 [s] (기본: 5.0)
---keep_dof_params  XML의 damping/armature/frictionloss 유지 (기본: 0으로 초기화)
+--policy          정책 파일 경로 (.pt JIT) [필수]
+--scene           MuJoCo XML 씬 파일 경로 [필수]
+--cmd_vx          전진 속도 명령 [m/s] (기본: 1.0)
+--cmd_vy          측면 속도 명령 [m/s] (기본: 0.0)
+--cmd_yaw         요 각속도 명령 [rad/s] (기본: 0.0)
+--duration        시뮬레이션 시간 [s] (기본: 30.0)
+--log_data        데이터 저장 경로 .npz
+--keep_dof_params XML의 damping/armature/frictionloss 유지 (기본: 0으로 초기화)
 ```
 
 ---
@@ -221,11 +187,6 @@ MuJoCo 환경에서 액추에이터만 독립적으로 테스트합니다.
 python scripts/mujoco/test_actuators.py \
     --scene ~/mujoco_menagerie/unitree_go2/go2_scene.xml \
     --mode pd_hold
-
-# 전기모터 ODE로 default 자세 유지
-python scripts/mujoco/test_actuators.py \
-    --scene ~/mujoco_menagerie/unitree_go2/go2_scene.xml \
-    --mode electric_hold
 
 # 한 관절에 step 입력 후 추종 성능 측정
 python scripts/mujoco/test_actuators.py \
