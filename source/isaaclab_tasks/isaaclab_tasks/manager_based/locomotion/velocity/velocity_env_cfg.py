@@ -156,8 +156,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "static_friction_range": (0.8, 0.8),
-            "dynamic_friction_range": (0.6, 0.6),
+            "static_friction_range": (0.4, 1.5),   # sim2sim: MuJoCo 범위 포함
+            "dynamic_friction_range": (0.3, 1.0),  # sim2sim: MuJoCo 범위 포함
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
         },
@@ -170,6 +170,19 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "mass_distribution_params": (-5.0, 5.0),
             "operation": "add",
+        },
+    )
+
+    # 모터 강도 DR: sim-to-sim 토크 오차 보상 (±20%)
+    motor_strength = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "stiffness_distribution_params": (0.8, 1.2),
+            "damping_distribution_params": (0.8, 1.2),
+            "operation": "scale",
+            "distribution": "uniform",
         },
     )
 
@@ -305,12 +318,10 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4 # policy update 주기: 5ms*decimation
-        self.episode_length_s = 20.0 #original: 20.0
+        self.decimation = 4
+        self.episode_length_s = 20.0
         # simulation settings
-        self.sim.dt = 0.005 # original: 0.005
-        # self.sim.physx.solver_position_iteration_count = 8
-        # self.sim.physx.solver_velocity_iteration_count = 2
+        self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15

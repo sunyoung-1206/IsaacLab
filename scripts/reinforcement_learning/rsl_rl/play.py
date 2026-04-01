@@ -34,6 +34,16 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+# fixed velocity command (sim-to-sim comparison)
+parser.add_argument("--cmd_vx",  type=float, default=None, help="Fix forward velocity command [m/s]")
+parser.add_argument("--cmd_vy",  type=float, default=None, help="Fix lateral velocity command [m/s]")
+parser.add_argument("--cmd_yaw", type=float, default=None, help="Fix yaw-rate command [rad/s]")
+# initial base height for sim-to-sim (read from MuJoCo "[INFO] initial base z = X.XXX m")
+parser.add_argument("--sim2sim_init_z", type=float, default=0.4,
+                    help="Initial base z [m] for sim-to-sim (match MuJoCo reset height, default=0.4)")
+# data logging for sim-to-sim comparison
+parser.add_argument("--log_data", type=str, default=None,
+                    help="Save logged data to this .npz path (e.g. isaaclab_data.npz)")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -57,6 +67,7 @@ import os
 import time
 
 import gymnasium as gym
+import numpy as np
 import torch
 from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
@@ -91,6 +102,31 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     agent_cfg: RslRlBaseRunnerCfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
 
+    # fix velocity commands for sim-to-sim comparison
+    if args_cli.cmd_vx is not None or args_cli.cmd_vy is not None or args_cli.cmd_yaw is not None:
+        vx  = args_cli.cmd_vx  if args_cli.cmd_vx  is not None else 0.0
+        vy  = args_cli.cmd_vy  if args_cli.cmd_vy  is not None else 0.0
+        yaw = args_cli.cmd_yaw if args_cli.cmd_yaw is not None else 0.0
+        env_cfg.commands.base_velocity.ranges.lin_vel_x = (vx,  vx)
+        env_cfg.commands.base_velocity.ranges.lin_vel_y = (vy,  vy)
+        env_cfg.commands.base_velocity.ranges.ang_vel_z = (yaw, yaw)
+        env_cfg.commands.base_velocity.heading_command  = False  # use ang_vel_z directly
+        env_cfg.commands.base_velocity.rel_standing_envs = 0.0   # no standing envs
+        print(f"[INFO] Fixed velocity command: vx={vx:.2f}  vy={vy:.2f}  yaw={yaw:.2f}")
+
+        # sim-to-sim: set initial base height to match MuJoCo ground-contact height
+        # MuJoCo reset_sim prints "[INFO] initial base z = X.XXX m" — use that value here
+        env_cfg.scene.robot.init_state.pos = (0.0, 0.0, args_cli.sim2sim_init_z)
+        # fix yaw/xy range to 0 so starting pose is deterministic
+        env_cfg.events.reset_base.params["pose_range"] = {
+            "x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (0.0, 0.0),
+        }
+        # disable startup DR events (mass, friction, motor — absent in MuJoCo)
+        env_cfg.events.physics_material = None
+        env_cfg.events.add_base_mass    = None
+        env_cfg.events.motor_strength   = None
+        print(f"[INFO] Sim-to-sim mode: init z={args_cli.sim2sim_init_z:.4f} m, all DR disabled")
+
     # set the environment seed
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
@@ -118,19 +154,43 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-    robot = env.unwrapped.scene["robot"]
+    inner_env = env.unwrapped  # ManagerBasedRLEnv reference (stable before wrapping)
+    robot = inner_env.scene["robot"]
+    
+    # 발 contact sensor 탐색
+    _FOOT_NAMES = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+    try:
+        contact_sensor = inner_env.scene["contact_forces"]
+        _sensor_bodies = list(contact_sensor.body_names)
+        # "_foot" 포함 이름 중 FL/FR/RL/RR 순서로 정렬
+        _foot_sensor_idx = []
+        for fname in _FOOT_NAMES:
+            matches = [i for i, n in enumerate(_sensor_bodies) if fname in n]
+            _foot_sensor_idx.append(matches[0] if matches else -1)
+        _has_contact = all(i >= 0 for i in _foot_sensor_idx)
+        print(f"[INFO] Contact sensor 발 인덱스: {dict(zip(_FOOT_NAMES, _foot_sensor_idx))}")
+        print("[INFO] Contact sensor body list:")                                                       
+        for i, name in enumerate(_sensor_bodies):                                                       
+            print(f"  [{i:2d}] {name}")
+        inertias = robot.root_physx_view.get_inertias()[0]  # (num_bodies, 9)                           
+        masses   = robot.root_physx_view.get_masses()[0]    # (num_bodies,)                             
+        body_names = list(robot.body_names)                                                             
+        for name, m in zip(body_names, masses):                                                         
+            print(f"  {name}: {m:.4f} kg")
+    except (KeyError, AttributeError):
+        _has_contact = False
+        print("[INFO] Contact sensor 없음 — foot_contact/force 미수집")
+
     for actuator in robot.actuators.values():
         if hasattr(actuator, 'inject_physx_view'):
             actuator.inject_physx_view(robot.root_physx_view)
             print(f"[INFO] Injected physx_view into {actuator.__class__.__name__}")
-    # robot = env.unwrapped.scene["robot"]
-    # view = robot.root_physx_view
-    # forces = view.get_dof_projected_joint_forces()
-    # print(f"shape: {forces.shape}", flush=True)
-    # print(f"dtype: {forces.dtype}", flush=True)
-    # print(f"sample: {forces[0]}", flush=True)
-    # sys.stdout.flush()
-    # print([m for m in dir(robot.root_physx_view) if 'effort' in m.lower() or 'force' in m.lower() or 'torque' in m.lower()])
+
+    # print joint armature values from PhysX (rotor inertia check)
+    armatures = robot.root_physx_view.get_dof_armatures()[0].tolist()
+    print("[INFO] Joint armatures (rotor inertia) from PhysX:")
+    for name, val in zip(robot.data.joint_names, armatures):
+        print(f"  {name}: {val:.6f} kg·m²")
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -188,6 +248,40 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     dt = env.unwrapped.step_dt
 
+    # data logging setup
+    _saved_joint_names = []  # closure용 — log_buffers가 None 되기 전에 캡처
+    log_buffers = None
+    sim_time = 0.0
+    if args_cli.log_data:
+        log_buffers = {"time": [], "tau": [], "q": [], "qdot": [],
+                       "lin_vel_b": [], "base_height": [], "cmd": [],
+                       "foot_contact": [], "foot_force": []}
+        _saved_joint_names[:] = list(robot.data.joint_names)
+        print(f"[INFO] Data logging enabled → {args_cli.log_data}")
+        print(f"[INFO] Joint order: {_saved_joint_names}")
+
+    def _save_log():
+        if log_buffers is None or not args_cli.log_data or len(log_buffers["time"]) == 0:
+            return
+        names = _saved_joint_names if _saved_joint_names else []
+        save_path = args_cli.log_data
+        np.savez(
+            save_path,
+            time=np.array(log_buffers["time"]),
+            tau=np.array(log_buffers["tau"]),
+            q=np.array(log_buffers["q"]),
+            qdot=np.array(log_buffers["qdot"]),
+            lin_vel_b=np.array(log_buffers["lin_vel_b"]),
+            base_height=np.array(log_buffers["base_height"]),
+            cmd=np.array(log_buffers["cmd"]),
+            joint_names=np.array(names),
+            foot_contact=np.array(log_buffers["foot_contact"]),
+            foot_force=np.array(log_buffers["foot_force"]),
+            foot_names=np.array(_FOOT_NAMES),
+            source="isaaclab",
+        )
+        print(f"[INFO] Data saved → {os.path.abspath(save_path)}  ({len(log_buffers['time'])} steps)")
+
     # reset environment
     obs = env.get_observations()
     timestep = 0
@@ -202,6 +296,39 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
             policy_nn.reset(dones)
+
+        # collect data for sim-to-sim comparison (env 0 only)
+        if log_buffers is not None:
+            sim_time += dt
+            # joint torques: try applied_torque first, fall back to zeros
+            try:
+                tau = robot.data.applied_torque[0].cpu().numpy()
+            except AttributeError:
+                tau = np.zeros(robot.data.joint_pos.shape[-1])
+            log_buffers["time"].append(sim_time)
+            log_buffers["tau"].append(tau.copy())
+            log_buffers["q"].append(robot.data.joint_pos[0].cpu().numpy().copy())
+            log_buffers["qdot"].append(robot.data.joint_vel[0].cpu().numpy().copy())
+            log_buffers["lin_vel_b"].append(robot.data.root_lin_vel_b[0].cpu().numpy().copy())
+            log_buffers["base_height"].append(robot.data.root_pos_w[0, 2].cpu().item())
+            # command: [lin_vel_x, lin_vel_y, ang_vel_z]
+            cmd_raw = inner_env.command_manager.get_command("base_velocity")[0].cpu().numpy()
+            log_buffers["cmd"].append(cmd_raw[:3].copy())  # take first 3 (vx, vy, yaw)
+            # 발 contact force
+            if _has_contact:
+                foot_f = contact_sensor.data.net_forces_w[0, _foot_sensor_idx, :]  # (4, 3)
+                foot_force_mag = torch.norm(foot_f, dim=-1).cpu().numpy().astype(np.float32)
+            else:
+                foot_force_mag = np.zeros(4, dtype=np.float32)
+            log_buffers["foot_force"].append(foot_force_mag.copy())
+            log_buffers["foot_contact"].append((foot_force_mag > 1.0).astype(np.float32))
+
+            # episode done for env 0 → save and stop logging
+            if dones[0]:
+                _save_log()
+                log_buffers = None  # 이후 수집 중단 (중복 저장 방지)
+                print("[INFO] Episode 0 done. Data saved. Continuing simulation...")
+
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video

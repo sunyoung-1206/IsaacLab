@@ -212,9 +212,13 @@ class ElectricMotor(DCMotor):
         tau_e    = self.cfg.L / self.cfg.R  # electrical time constant ~0.33ms
         n_points = max(3, int(dt / (tau_e * 0.5)))
         t_span   = torch.linspace(0.0, dt, n_points, dtype=torch.float32, device=self._device)
+        # print(f"t_span: {t_span}")
+        # print(f"tau_e: {tau_e:.6f}, dt: {dt:.6f}, n_points: {n_points}")
 
         ode_func = self._make_ode(V_cmd, self.tau_load)
         state1   = odeint(ode_func, state0, t_span, method='dopri5', rtol=1e-4, atol=1e-6)[-1]
+        # print(f"state0 I mean: {state0[...,0].abs().mean():.4f}, omega mean: {state0[...,1].abs().mean():.4f}")
+        # print(f"state1 I mean: {state1[...,0].abs().mean():.4f}")
 
         I_ode = state1[..., 0]
         I_max = self.cfg.V_max / self._R
@@ -248,18 +252,26 @@ class ElectricMotor(DCMotor):
         control_action.joint_efforts    = tau_joint
         control_action.joint_positions  = None
         control_action.joint_velocities = None
-        # if sim_time < 0.1:
-        #     print(f"tau_load mean: {self.tau_load.abs().mean():.3f}, max: {self.tau_load.abs().max():.3f}")
-        #     print(f"I_ode mean: {I_ode.abs().mean():.3f}, max: {I_ode.abs().max():.3f}")
-        #     print(f"tau_joint mean: {tau_joint.abs().mean():.3f}")
-        #     max_idx = I_ode.abs().argmax()
-        #     env_idx = max_idx // self.num_joints
-        #     joint_idx = max_idx % self.num_joints
-        #     print(f"I_ode max env={env_idx}, joint={joint_idx}, val={I_ode.abs().max():.1f}")
-        #     print(f"V_cmd at max: {V_cmd[env_idx, joint_idx]:.3f}")
-        #     print(f"omega at max: {self.omega[env_idx, joint_idx]:.3f}")
-        #     print(f"tau_load at max: {self.tau_load[env_idx, joint_idx]:.3f}")
-        #     print(f"self.I min: {self.I.min():.3f}, max: {self.I.max():.3f}")
+        if sim_time < 0.1:
+            print(f"tau_load mean: {self.tau_load.abs().mean():.3f}, max: {self.tau_load.abs().max():.3f}")
+            print(f"I_ode mean: {I_ode.abs().mean():.3f}, max: {I_ode.abs().max():.3f}")
+            print(f"tau_joint mean: {tau_joint.abs().mean():.3f}")
+            max_idx = I_ode.abs().argmax()
+            env_idx = max_idx // self.num_joints
+            joint_idx = max_idx % self.num_joints
+            print(f"I_ode max env={env_idx}, joint={joint_idx}, val={I_ode.abs().max():.1f}")
+            print(f"V_cmd at max: {V_cmd[env_idx, joint_idx]:.3f}")
+            print(f"omega at max: {self.omega[env_idx, joint_idx]:.3f}")
+            print(f"tau_load at max: {self.tau_load[env_idx, joint_idx]:.3f}")
+            print(f"self.I min: {self.I.min():.3f}, max: {self.I.max():.3f}")
+            print(f"V_cmd mean: {V_cmd.abs().mean():.3f}, tau_des mean: {tau_des.abs().mean():.3f}, e_q mean: {e_q.abs().mean():.3f}")
+            net_V = V_cmd - self.cfg.Ke * self.omega
+            print(f"net_V mean: {net_V.abs().mean():.3f}, omega mean: {self.omega.abs().mean():.3f}")
+            print(f"tau_load in ODE mean: {self.tau_load.abs().mean():.3f}, Kt*I*gr mean: {(self.cfg.Kt * self.I * gr).abs().mean():.3f}")
+            I_ss_check = (V_cmd - self.cfg.Ke * self.omega) / self._R
+            print(f"I_ss_check mean: {I_ss_check.abs().mean():.3f}, I_ode mean: {I_ode.abs().mean():.3f}")
+            print(f"velocity_limit: {self.velocity_limit}, vel_lim in ODE: {self.velocity_limit * self.cfg.gear_ratio}")
+            print(f"state1 omega mean: {state1[...,1].abs().mean():.3f}")
 
         return control_action
 
@@ -277,11 +289,11 @@ class ElectricMotorCfg(DCMotorCfg):
     Kt: float    = 0.128   # 토크 상수 [N·m/A]
     Ke: float    = 0.128   # 역기전력 상수 [V·s/rad]
     R: float     = 0.3     # 권선 저항 [Ω]
-    L: float     = 7.5*1e-4    # 인덕턴스 [H] 원래는 7.5 안주고 줬었음
+    L: float     = 1e-4    # 인덕턴스 [H] 
     V_max: float = 24.0    # 최대 공급 전압 [V]
 
     # 기계 파라미터
-    J: float = 0.05   # 모터 관성 모멘트 [kg·m²]
+    J: float = 1e-4   # 모터 관성 모멘트 [kg·m²]
     B: float = 1e-3   # 점성 마찰 계수 [N·m·s/rad]
 
     # 고장 파라미터

@@ -167,7 +167,7 @@ UNITREE_GO2_CFG = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
-        "base_legs": ElectricMotorCfg(
+        "base_legs": DCMotorCfg(
             joint_names_expr=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
             effort_limit=23.5,
             saturation_effort=23.5,
@@ -175,14 +175,14 @@ UNITREE_GO2_CFG = ArticulationCfg(
             stiffness=25.0, # originally 25.0
             damping=0.6, # originally 0.5
             friction=0.0,
-            # 전기 파라미터 추가
-            Kt=0.128,
-            Ke=0.128,
-            R=0.3,
-            L=1e-4,
-            V_max=24.0,
-            # J=1e-4,
-            # B=1e-3,
+            # # 전기 파라미터 추가
+            # Kt=0.128,
+            # Ke=0.128,
+            # R=0.3,
+            # L=1e-4,
+            # V_max=24.0,
+            # # J=1e-4,
+            # # B=1e-3,
         ),
     },
 )

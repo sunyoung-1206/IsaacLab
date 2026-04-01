@@ -139,6 +139,12 @@ class ImplicitActuator(ActuatorBase):
         self.computed_effort = self.stiffness * error_pos + self.damping * error_vel + control_action.joint_efforts
         # clip the torques based on the motor limits
         self.applied_effort = self._clip_effort(self.computed_effort)
+        import isaaclab.sim as sim_utils
+        from isaaclab.sim import SimulationContext
+        sim_time = SimulationContext.instance().current_time
+        if sim_time < 0.1:
+            print(f"[Implicit] tau mean: {self.applied_effort.abs().mean():.3f}, max: {self.applied_effort.abs().max():.3f}")
+        
         return control_action
 
 
